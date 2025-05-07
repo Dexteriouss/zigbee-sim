@@ -13,7 +13,7 @@ def main():
     routers = [d for d in network.devices if isinstance(d, net.Router)]
     end_devices = [d for d in network.devices if isinstance(d, net.EndDevice)]
     
-    print("Starting Zigbee network simulation...")
+    print("Starting network simulation...")
     
     for device in network.devices:
         print(device)
@@ -22,30 +22,31 @@ def main():
             print(device.neighbors)
     
     print(network.build_routing_table(network.devices[0]))
-
+    var = True
     try:
         while True:
             # Generate random traffic every 2 seconds
             time.sleep(1)
-            
-            # Randomly select an EndDevice to send data
-            source = random.choice(end_devices)
-            packet = network.build_packet(
-                type=net.PacketType.DATA,
-                source=source,
-                destination=coordinator,
-                packet_size=100,  # bytes
-                TTL=5,  # seconds
-                data="Sensor Data"  # Example payload
-            )
-            
-            print(f"\nDevice {source.id} sending packet to Coordinator")
-            network.queue_packet(source, packet)
+            while (var):
+              # Randomly select an EndDevice to send data
+              source = random.choice(end_devices)
+              packet = network.build_packet(
+                  type=net.PacketType.DATA,
+                  source=source,
+                  destination=coordinator,
+                  packet_size=100,        # bytes
+                  TTL=5,                  # seconds
+                  data="Sensor Data"      # Example payload
+              )
+              var = False
+              print(f"\nDevice {source.id} sending packet to Coordinator")
+              network.queue_packet(source, packet)
             
             # Process packets in all device queues
             for device in network.devices:
+                print(f"Device: {device.id}", f"Packets?:", bool(device.packet_queue))
                 while device.packet_queue:
-                    packet = device.packet_queue.pop(0)
+                    packet = device.packet_queue[0]
                     result = network.process_packet(device, packet)
                     
                     if result == net.ReturnMsg.SUCCESS:
@@ -53,6 +54,7 @@ def main():
                             print(f"Coordinator received: {packet.data}")
                     else:
                         print(f"Packet from {packet.source.id} failed!")
+            
 
     except KeyboardInterrupt:
         print("\nSimulation stopped")

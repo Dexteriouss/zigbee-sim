@@ -41,7 +41,7 @@ class Device:
         return isinstance(other, Device) and self.id == other.id
     
     def __str__(self):
-        return f"{str(self.id)} Position: {self.x},{self.y}"
+        return f"Device {str(self.id)} Position: {self.x},{self.y}"
     
     def __repr__(self):
         return f"{str(self.id)}"
@@ -59,7 +59,7 @@ class Coordinator(Device):
         return isinstance(other, Coordinator) and self.id == other.id
     
     def __str__(self):
-        return f"{str(self.id)} Position: {self.x},{self.y}"
+        return f"Device {str(self.id)} Position: {self.x},{self.y}"
     
     def __repr__(self):
         return f"{str(self.id)}"
@@ -77,7 +77,7 @@ class Router(Device):
         return isinstance(other, Router) and self.id == other.id
     
     def __str__(self):
-        return f"{str(self.id)} Position: {self.x},{self.y}"
+        return f"Device {str(self.id)} Position: {self.x},{self.y}"
     
     def __repr__(self):
         return f"{str(self.id)}"
@@ -94,14 +94,14 @@ class EndDevice(Device):
         return isinstance(other, EndDevice) and self.id == other.id
     
     def __str__(self):
-        return f"{str(self.id)} Position: {self.x},{self.y}"
+        return f"Device {str(self.id)} Position: {self.x},{self.y}"
     
     def __repr__(self):
         return f"{str(self.id)}"
 
 @dataclass
 class Packet:
-    packet_type: PacketType.DATA
+    packet_type: PacketType
     source: Device
     destination: Device
     packet_size: int        # in bytes
@@ -117,7 +117,7 @@ class ZigBeeNetwork:
         self.area_size = area_size
         self.devices: List[Device] = []
         self.simulation_time = 0.0
-        self.transmit_speed = 250,000 # 250 kbps
+        self.transmit_speed = 250000 # 250 kbps
         
     # Set up the initial network configuration
     def setup_network(self) -> None:
@@ -234,9 +234,10 @@ class ZigBeeNetwork:
 
     # Process a single packet transmission
     def process_packet(self, device: Device, packet: Packet) -> None:
+        print(f"Processing packet for {device}")
         # Check if packet is still valid
-        if (time.time_ns() - (packet.TTL * 1000000000) <= packet.timestamp):
-            return ReturnMsg.SUCCESS
+        if (time.time_ns() - (packet.TTL * 1000000000) >= packet.timestamp):
+            return ReturnMsg.FAILURE
         
         # First transmission from an EndDevice
         if (packet.source == device):
@@ -244,19 +245,20 @@ class ZigBeeNetwork:
             return ReturnMsg.SUCCESS
         
         # Packet reaches parent router of destination
-        elif (packet.destination in device.children):
+        elif (isinstance(device, Router) and packet.destination in device.children):
             self.transmit_packet(device, packet.destination, packet)
             return ReturnMsg.SUCCESS
         
-        # Special case for Coordinator
-        elif (packet.destination == device and isinstance(device, Coordinator)):
+        elif (packet.destination == device):
             # Packet logic for sending route information - future
+            print(f"Packet {packet} recieved")
+            device.packet_queue.remove(packet)
             return ReturnMsg.SUCCESS
         
         # Intermediate transmission
         else:
             # Future implementation - have to search for coordinator
-            device_to_send = self.get_routing(self.devices[0], packet.source, packet.destination)
+            device_to_send = self.get_routing(self.devices[0], device, packet.destination)
             self.transmit_packet(device, device_to_send, packet)
             return ReturnMsg.SUCCESS 
     
@@ -264,17 +266,24 @@ class ZigBeeNetwork:
     def get_routing(self, coordinator: Coordinator, requesting_device: Device, device_to_search: Device) -> Device:
         temppacket = self.build_packet(PacketType.REQ, requesting_device, coordinator, 100, 5, device_to_search)
         packet = self.build_packet(PacketType.REQ, requesting_device, coordinator, sys.getsizeof(temppacket), 5, device_to_search)
-        self.transmit_packet(packet)
+        self.queue_packet(requesting_device, packet)
+        self.transmit_packet(packet.source, packet.destination, packet)
 
         # Gets route from Coordinator automatically - develop in future
+        if (isinstance(device_to_search, Router)):
+            print(f"searching for {device_to_search}:", coordinator.routing_table[requesting_device][device_to_search.parent])
+            return coordinator.routing_table[requesting_device][device_to_search]
+        elif (isinstance(device_to_search, EndDevice)):
+            print(f"searching for {device_to_search.parent}:", coordinator.routing_table[requesting_device][device_to_search.parent])
+            return coordinator.routing_table[requesting_device][device_to_search.parent]
         return coordinator.routing_table[requesting_device][device_to_search]
 
     # Transmits a packet from a source to destination
     def transmit_packet(self, source: Device, destination: Device, packet: Packet):
         source.packet_queue.remove(packet)
         destination.packet_queue.append(packet)
-        
-        time.sleep((packet.data * 8)/(self.transmit_speed))
+
+        time.sleep((packet.packet_size * 8)/(self.transmit_speed))
 
     def build_routing_table(self, coordinator: Coordinator):
         # Initialize routing table
