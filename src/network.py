@@ -6,10 +6,10 @@ import sys
 from typing import Dict, List, Optional, Tuple
 import time
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Union
-
+import heapq
 
 class PacketType(Enum):
     ACK = 0    # Acknowledgment packet
@@ -28,29 +28,76 @@ class Device:
     y: float
     transmit_power: float
     min_recieve_power: float
-    energy: float
     packets_sent: int = 0
     packets_received: int = 0
     bytes_sent: int = 0
     bytes_received: int = 0
-    packet_queue: List["Packet"] = []
+    packet_queue: List["Packet"] = field(default_factory=list)
+
+    def __hash__(self):
+        return hash(self.id)
+    
+    def __eq__(self, other):
+        return isinstance(other, Device) and self.id == other.id
+    
+    def __str__(self):
+        return f"{str(self.id)} Position: {self.x},{self.y}"
+    
+    def __repr__(self):
+        return f"{str(self.id)}"
 
 # Coordinator device
 @dataclass
 class Coordinator(Device):
-    neighbors: List[Device] # Routers
-    routing_table: Dict[Device: Dict[Device: Device]]
+    neighbors: List[Device] = field(default_factory=list) # Routers
+    routing_table: Dict[Device, Dict[Device, Device]] = field(default_factory=dict)
 
+    def __hash__(self):
+        return hash(self.id)
+    
+    def __eq__(self, other):
+        return isinstance(other, Coordinator) and self.id == other.id
+    
+    def __str__(self):
+        return f"{str(self.id)} Position: {self.x},{self.y}"
+    
+    def __repr__(self):
+        return f"{str(self.id)}"
+    
 # Router device
 @dataclass
 class Router(Device):
-    neighbors: List[Device] # Routers
-    children: List[Device] # EndDevices
+    neighbors: List[Device] = field(default_factory=list) # Routers
+    children: List[Device] = field(default_factory=list)# EndDevices
+
+    def __hash__(self):
+        return hash(self.id)
+    
+    def __eq__(self, other):
+        return isinstance(other, Router) and self.id == other.id
+    
+    def __str__(self):
+        return f"{str(self.id)} Position: {self.x},{self.y}"
+    
+    def __repr__(self):
+        return f"{str(self.id)}"
 
 # End Device
 @dataclass
 class EndDevice(Device):
-    parent: Router
+    parent: Router = Router
+
+    def __hash__(self):
+        return hash(self.id)
+    
+    def __eq__(self, other):
+        return isinstance(other, EndDevice) and self.id == other.id
+    
+    def __str__(self):
+        return f"{str(self.id)} Position: {self.x},{self.y}"
+    
+    def __repr__(self):
+        return f"{str(self.id)}"
 
 @dataclass
 class Packet:
@@ -91,7 +138,6 @@ class ZigBeeNetwork:
                     # Other paramaters
                     transmit_power=0.0,  # dBm
                     min_recieve_power=-85.0,  # dBm
-                    energy=100.0,  # Battery life (measured in %)
                 )
             elif i < self.num_devices // 2: 
                 # Half routers
@@ -103,7 +149,6 @@ class ZigBeeNetwork:
                     # Other paramaters
                     transmit_power=0.0,  # dBm
                     min_recieve_power=-85.0,  # dBm
-                    energy=100.0,  # Battery life (measured in %)
                 )
             else:
                 # Remaining Devices are EndDevices
@@ -113,9 +158,8 @@ class ZigBeeNetwork:
                     x=x,
                     y=y,
                     # Other paramaters
-                    transmit_power=0.0,  # dBm
+                    transmit_power=100,  # dBm
                     min_recieve_power=-85.0,  # dBm
-                    energy=100.0,  # Battery life (measured in %)
                 )
             
             # Add to device list
@@ -136,7 +180,7 @@ class ZigBeeNetwork:
                     self.can_communicate(device1, device2)):
                     
                     # Add to neighbors list
-                    device1.neighbors.append(j)
+                    device1.neighbors.append(device2)
 
                 # For every EndDevice, set the router with the most power as the parent to route traffic through
                 elif (i != j and
@@ -165,7 +209,7 @@ class ZigBeeNetwork:
         
     # Check if received power is above the reciever's minimum power threshold
     def can_communicate(self, source: Device, destination: Device) -> bool:
-        return self.received_power(source, destination) >= destination.min_recieve_power
+        return self.recieved_power(source, destination) >= destination.min_recieve_power
 
     # Determine if two devices can communicate based on distance and power
     def recieved_power(self, source: Device, destination: Device) -> float:
@@ -178,7 +222,7 @@ class ZigBeeNetwork:
 
     # Build a packet
     def build_packet(self, type: PacketType, source: Device, destination: Device, packet_size: int, TTL: int, data: Union[str, int, float, Device]) -> Packet:
-        if source != self.devices or destination != self.devices:
+        if source not in self.devices or destination not in self.devices:
             raise ValueError("Invalid device ID")
         
         timestamp = time.time_ns()
@@ -232,43 +276,58 @@ class ZigBeeNetwork:
         
         time.sleep((packet.data * 8)/(self.transmit_speed))
 
-    # Start the network simulation
-    def start_simulation(self, duration: float = 100.0) -> None:
-        end_time = self.simulation_time + duration
-        
-        while self.simulation_time < end_time:
-            # Process all packets due for transmission
-            current_packets = [p for p in self.packet_queue if p['next_transmission'] <= self.simulation_time]
-            
-            for packet in current_packets:
-                self.process_packet(packet)
-                
-            # Advance simulation time
-            if current_packets:
-                self.simulation_time = min(p['next_transmission'] for p in current_packets)
-            else:
-                self.simulation_time = end_time
-                
-    # Stop the network simulation
-    def stop_simulation(self) -> None:
-        self.packet_queue.clear()
-        self.simulation_time = 0.0
+    def build_routing_table(self, coordinator: Coordinator):
+        # Initialize routing table
+        coordinator.routing_table = {}
 
-if __name__ == "__main__":
-    # Example usage
-    network = ZigBeeNetwork(num_devices=10)
-    network.setup_network()
-    
-    # Add some traffic
-    network.add_traffic(0, 1)  # Device 0 sends to device 1
-    network.add_traffic(2, 3)  # Device 2 sends to device 3
-    
-    # Run simulation
-    network.start_simulation(duration=100.0)
-    data = network.collect_data()
-    network.stop_simulation()
-    
-    print("Simulation completed. Collected data:")
-    print(f"Device positions: {data['device_positions']}")
-    print(f"Packet statistics: {data['packet_stats']}")
-    print(f"Energy levels: {data['energy_levels']}") 
+        for beginning_device in self.devices:
+            if not (isinstance(beginning_device, EndDevice)):
+                for target in self.devices:
+                    if target == beginning_device:
+                        continue
+
+                    # Dijkstra's algorithm from device to target
+                    distances = {device: float('inf') for device in self.devices}
+                    previous = {device: None for device in self.devices}
+                    distances[beginning_device] = 0
+
+                    heap = [(0, beginning_device)]
+
+                    while heap:
+                        current_dist, current_device = heapq.heappop(heap)
+
+                        if current_dist > distances[current_device]:
+                            continue
+
+                        for neighbor in current_device.neighbors:
+                            if neighbor not in distances:
+                                continue  # Skip unknown nodes
+
+                            alt = current_dist + self.calculate_distance(current_device, neighbor)
+                            if alt < distances[neighbor]:
+                                distances[neighbor] = alt
+                                previous[neighbor] = current_device
+                                heapq.heappush(heap, (alt, neighbor))
+
+                    # Backtrack from target to find next hop
+                    path = []
+                    step = target 
+                    # Reconstruct path only if there's a path
+                    while step and step != beginning_device:
+                        if previous[step] is None:
+                            path = []  # Clear path to indicate no route
+                            break
+                        path.append(step)
+                        step = previous[step]
+
+                    path.reverse()
+
+                    if path:
+                        next_hop = path[0]
+                        if beginning_device not in coordinator.routing_table:
+                            coordinator.routing_table[beginning_device] = {}
+                        coordinator.routing_table[beginning_device][target] = next_hop
+                    
+        return coordinator.routing_table
+
+
