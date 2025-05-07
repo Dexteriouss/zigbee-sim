@@ -59,16 +59,6 @@ pip install -r requirements.txt
 
 1. Network Simulation:
 ```bash
-python src/network/simulate.py
+python src/network.py
 ```
 
-2. Attack Simulation:
-```bash
-python src/attacks/run_attack.py
-```
-
-3. Intrusion Detection:
-```bash
-python src/detection/train.py
-python src/detection/detect.py
-```
