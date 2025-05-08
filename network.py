@@ -251,9 +251,24 @@ class ZigBeeNetwork:
             print("Device not connected to network.")
             device.packet_queue.remove(packet)
             return ReturnMsg.FAILURE
+        elif (isinstance(packet.destination, (Coordinator, Router))and not packet.destination.neighbors):
+            print("Destination not connected to network.")
+            device.packet_queue.remove(packet)
+            return ReturnMsg.FAILURE
+        elif (isinstance(packet.destination, (EndDevice))and not packet.destination.parent):
+            print("Destination not connected to network.")
+            device.packet_queue.remove(packet)
+            return ReturnMsg.FAILURE
         
+        # Reaches destination
+        if (packet.destination == device):
+            # Packet logic for sending route information - future
+            print(f"Packet recieved at {device}.\n")
+            device.packet_queue.remove(packet)
+            return ReturnMsg.SUCCESS
+
         # First transmission
-        if (packet.source == device):
+        elif (packet.source == device):
             self.transmit_packet(device, device.parent, packet)
             return ReturnMsg.SUCCESS
         
@@ -262,11 +277,6 @@ class ZigBeeNetwork:
             self.transmit_packet(device, packet.destination, packet)
             return ReturnMsg.SUCCESS
         
-        elif (packet.destination == device):
-            # Packet logic for sending route information - future
-            print(f"Packet recieved at {device}.\n")
-            device.packet_queue.remove(packet)
-            return ReturnMsg.SUCCESS
         
         # Intermediate transmission
         else:
@@ -305,7 +315,7 @@ class ZigBeeNetwork:
 
         time.sleep((packet.packet_size * 8)/(self.transmit_speed))
 
-        print(f"Transmission complete.\n")
+        print(f"Transmission complete.")
 
     def build_routing_table(self, coordinator: Coordinator):
         # Initialize routing table
