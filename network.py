@@ -242,8 +242,17 @@ class ZigBeeNetwork:
             print(f"Packet died at {device}: {time.time_ns() - (packet.TTL * 1000000000)}, {packet.timestamp}")
             device.packet_queue.remove(packet)
             return ReturnMsg.FAILURE
-
-        # First transmission from an EndDevice
+        # Check if the device is connected to the network
+        elif ((isinstance(device, EndDevice) and not device.parent)):
+            print("Device not connected to network.")
+            device.packet_queue.remove(packet)
+            return ReturnMsg.FAILURE
+        elif (isinstance(device, (Coordinator, Router)) and not device.neighbors):
+            print("Device not connected to network.")
+            device.packet_queue.remove(packet)
+            return ReturnMsg.FAILURE
+        
+        # First transmission
         if (packet.source == device):
             self.transmit_packet(device, device.parent, packet)
             return ReturnMsg.SUCCESS

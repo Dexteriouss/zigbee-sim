@@ -5,6 +5,7 @@ import network as net
 import matplotlib.pyplot as plt
 
 PACKET_SIZE = 10000
+RESULTSFILE = 'results.txt'
 
 def initialize_network(num_devices: int = 10, area_size: float = 200.0):
     # Initialize network with 10 devices (1 Coordinator, 4 Routers, 5 EndDevices)
@@ -77,22 +78,33 @@ def generate_overload_traffic(network: net.ZigBeeNetwork, num_packets: int, ttl:
 
 def simulate(network: net.ZigBeeNetwork):
     # Search through all packets queued
+    failed_packets = 0
+    empty_devices = 0
     try:
-        while(True):
+        while(empty_devices < len(network.devices)):
+          empty_devices = 0
           time.sleep(0.1)
           for device in network.devices:
-              print(f"Device: {device.id}", f"Packets:", bool(device.packet_queue))
-              while device.packet_queue:
-                  packet = device.packet_queue[0]
-                  result = network.process_packet(device, packet)
-                  
-                  if result == net.ReturnMsg.SUCCESS:
-                      if isinstance(device, net.EndDevice):
-                          print(f"{device} processed: {packet.data}")
-                  else:
-                      print(f"Packet from {packet.source} failed!\n")
-    except KeyboardInterrupt:
+                print(f"Device: {device.id}", f"Packets:", bool(device.packet_queue), empty_devices, len(network.devices))
+                if (device.packet_queue):
+                    while device.packet_queue:
+                        packet = device.packet_queue[0]
+                        result = network.process_packet(device, packet)
+                        
+                        if result == net.ReturnMsg.SUCCESS:
+                            if isinstance(device, net.EndDevice):
+                                print(f"{device} processed: {packet.data}")
+                        else:
+                            failed_packets += 1
+                            print(f"Packet from {packet.source} failed!\n")
+                            print(failed_packets)
+                else:
+                    empty_devices += 1
+        with open(RESULTSFILE, "a") as f:
+            f.write(f"{failed_packets}")
         print(f"Simulation Ended.")
+    except KeyboardInterrupt:
+        print(f"Simulation Aborted.")
 
 def plot_devices(devices: list):
     plt.figure(figsize=(10, 8))
@@ -120,7 +132,6 @@ def plot_devices(devices: list):
               plt.plot([r.x, neighbor.x], [r.y, neighbor.y], color='blue', linestyle='--')
 
         for child in r.children:
-            print(r, child)
             plt.plot([r.x, child.x], [r.y, child.y], color='green', linestyle=':')
 
     # Plot EndDevices
@@ -139,10 +150,19 @@ def plot_devices(devices: list):
     
 
 if __name__ == "__main__":
+    with open(RESULTSFILE, "w") as f:
+        f.write("FINAL FAILURE METRICS:\n")
+        f.write("\nRegular Fails:")
+
     network = initialize_network(10, 250)
     generate_reg_traffic(network, num_packets=10, ttl=6)
     simulate(network)
 
+    with open(RESULTSFILE, "a") as f:
+        f.write("\n\nAttack Fails:")
+
+    print("Starting attack...")
+    time.sleep(3)
 
     generate_overload_traffic(network, num_packets=20, ttl=6)
     simulate(network)
