@@ -24,21 +24,8 @@ zigbee-sim/
 - numpy
 - matplotlib (for visualization)
 
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/zigbee-sim.git
-cd zigbee-sim
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
+## Dependencies
+Install dependencies:
 ```bash
 pip install numpy
 pip install matplotlib
