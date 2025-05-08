@@ -1,6 +1,3 @@
-"""
-    Zigbee Network simulation
-"""
 import numpy as np
 import sys
 from typing import Dict, List, Optional, Tuple
@@ -41,7 +38,7 @@ class Device:
         return isinstance(other, Device) and self.id == other.id
     
     def __str__(self):
-        return f"Device {str(self.id)} Position: {self.x},{self.y}"
+        return f"Device {str(self.id)}"
     
     def __repr__(self):
         return f"{str(self.id)}"
@@ -59,7 +56,7 @@ class Coordinator(Device):
         return isinstance(other, Coordinator) and self.id == other.id
     
     def __str__(self):
-        return f"Device {str(self.id)} Position: {self.x},{self.y}"
+        return f"Device {str(self.id)}"
     
     def __repr__(self):
         return f"{str(self.id)}"
@@ -77,7 +74,7 @@ class Router(Device):
         return isinstance(other, Router) and self.id == other.id
     
     def __str__(self):
-        return f"Device {str(self.id)} Position: {self.x},{self.y}"
+        return f"Device {str(self.id)}"
     
     def __repr__(self):
         return f"{str(self.id)}"
@@ -85,7 +82,7 @@ class Router(Device):
 # End Device
 @dataclass
 class EndDevice(Device):
-    parent: Router = Router
+    parent: Optional[Router] = None
 
     def __hash__(self):
         return hash(self.id)
@@ -94,7 +91,7 @@ class EndDevice(Device):
         return isinstance(other, EndDevice) and self.id == other.id
     
     def __str__(self):
-        return f"Device {str(self.id)} Position: {self.x},{self.y}"
+        return f"Device {str(self.id)}"
     
     def __repr__(self):
         return f"{str(self.id)}"
@@ -118,6 +115,8 @@ class ZigBeeNetwork:
         self.devices: List[Device] = []
         self.simulation_time = 0.0
         self.transmit_speed = 250000 # 250 kbps
+        self.transmit_power = 0 # dBm
+        self.min_recieve_power = -85 # dBm
         
     # Set up the initial network configuration
     def setup_network(self) -> None:
@@ -136,8 +135,8 @@ class ZigBeeNetwork:
                     x=x,
                     y=y,
                     # Other paramaters
-                    transmit_power=0.0,  # dBm
-                    min_recieve_power=-85.0,  # dBm
+                    transmit_power=self.transmit_power,  # dBm
+                    min_recieve_power=self.min_recieve_power,  # dBm
                 )
             elif i < self.num_devices // 2: 
                 # Half routers
@@ -147,8 +146,8 @@ class ZigBeeNetwork:
                     x=x,
                     y=y,
                     # Other paramaters
-                    transmit_power=0.0,  # dBm
-                    min_recieve_power=-85.0,  # dBm
+                    transmit_power=self.transmit_power,  # dBm
+                    min_recieve_power=self.min_recieve_power,  # dBm
                 )
             else:
                 # Remaining Devices are EndDevices
@@ -158,8 +157,8 @@ class ZigBeeNetwork:
                     x=x,
                     y=y,
                     # Other paramaters
-                    transmit_power=100,  # dBm
-                    min_recieve_power=-85.0,  # dBm
+                    transmit_power=self.transmit_power,  # dBm
+                    min_recieve_power=self.min_recieve_power,  # dBm
                 )
             
             # Add to device list
@@ -171,7 +170,7 @@ class ZigBeeNetwork:
     # Build neighbor lists for each device based on distance
     def build_neighbor_lists(self) -> None:
         for i, device1 in enumerate(self.devices):
-            max_power = 0
+            max_power = -1000000
             for j, device2 in enumerate(self.devices):
                 # Build communication network between routers and the coordinator
                 if (i != j and 
@@ -189,6 +188,9 @@ class ZigBeeNetwork:
                     self.can_communicate(device1, device2)):
 
                     if (max_power < self.recieved_power(device1, device2)):
+                        max_power = self.recieved_power(device1, device2)
+                        if (device1.parent):
+                            device1.parent.children.remove(device1)
                         device1.parent = device2
                         device2.children.append(device1)
                         
@@ -234,24 +236,26 @@ class ZigBeeNetwork:
 
     # Process a single packet transmission
     def process_packet(self, device: Device, packet: Packet) -> None:
-        print(f"Processing packet for {device}")
+        print(f"Device {device.id}: Processing a packet: {packet.source} to {packet.destination}")
         # Check if packet is still valid
-        if (time.time_ns() - (packet.TTL * 1000000000) >= packet.timestamp):
+        if (time.time_ns() - (packet.TTL * 1000000000) >= packet.timestamp and device != packet.source):
+            print(f"Packet died at {device}: {time.time_ns() - (packet.TTL * 1000000000)}, {packet.timestamp}")
+            device.packet_queue.remove(packet)
             return ReturnMsg.FAILURE
-        
+
         # First transmission from an EndDevice
         if (packet.source == device):
             self.transmit_packet(device, device.parent, packet)
             return ReturnMsg.SUCCESS
         
         # Packet reaches parent router of destination
-        elif (isinstance(device, Router) and packet.destination in device.children):
+        elif (isinstance(device, Router) and (packet.destination in device.children or packet.destination in device.neighbors)):
             self.transmit_packet(device, packet.destination, packet)
             return ReturnMsg.SUCCESS
         
         elif (packet.destination == device):
             # Packet logic for sending route information - future
-            print(f"Packet {packet} recieved")
+            print(f"Packet recieved at {device}.\n")
             device.packet_queue.remove(packet)
             return ReturnMsg.SUCCESS
         
@@ -270,20 +274,29 @@ class ZigBeeNetwork:
         self.transmit_packet(packet.source, packet.destination, packet)
 
         # Gets route from Coordinator automatically - develop in future
-        if (isinstance(device_to_search, Router)):
-            print(f"searching for {device_to_search}:", coordinator.routing_table[requesting_device][device_to_search.parent])
+        try:
+            if (isinstance(device_to_search, Router)):
+                print(f"Searching for {device_to_search}:", coordinator.routing_table[requesting_device][device_to_search.parent])
+                return coordinator.routing_table[requesting_device][device_to_search]
+            elif (isinstance(device_to_search, EndDevice)):
+                print(f"Searching for {device_to_search.parent}:", coordinator.routing_table[requesting_device][device_to_search.parent])
+                return coordinator.routing_table[requesting_device][device_to_search.parent]
             return coordinator.routing_table[requesting_device][device_to_search]
-        elif (isinstance(device_to_search, EndDevice)):
-            print(f"searching for {device_to_search.parent}:", coordinator.routing_table[requesting_device][device_to_search.parent])
-            return coordinator.routing_table[requesting_device][device_to_search.parent]
-        return coordinator.routing_table[requesting_device][device_to_search]
+        except AttributeError:
+            print("Network not connected to coordinator.")
 
     # Transmits a packet from a source to destination
     def transmit_packet(self, source: Device, destination: Device, packet: Packet):
         source.packet_queue.remove(packet)
+        # Set timestamp for initial transmission
+        if (source == packet.source):
+            packet.timestamp = time.time_ns()
         destination.packet_queue.append(packet)
+        print(f"Transmitting a packet: {source.id} to {destination.id}.")
 
         time.sleep((packet.packet_size * 8)/(self.transmit_speed))
+
+        print(f"Transmission complete.\n")
 
     def build_routing_table(self, coordinator: Coordinator):
         # Initialize routing table

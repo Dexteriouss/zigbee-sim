@@ -13,26 +13,14 @@ The project consists of three main components:
 
 ```
 zigbee-sim/
-├── data/                    # Data collection and storage
-├── models/                  # Trained neural network models
-├── notebooks/              # Jupyter notebooks for analysis
-├── src/
-│   ├── network/            # NS-3 network simulation code
-│   ├── attacks/            # Attack simulation implementations
-│   ├── detection/          # Intrusion detection system
-│   └── utils/              # Utility functions and helpers
-├── tests/                  # Test files
-├── requirements.txt        # Python dependencies
+
+├── simulate_network.py
+├── network.py             # Test files
+├── requirements.txt       # Python dependencies
 └── README.md              # Project documentation
 ```
 
 ## Dependencies
-
-- Python 3.8+
-- NS-3
-- PyTorch
-- scikit-learn
-- pandas
 - numpy
 - matplotlib (for visualization)
 
@@ -52,13 +40,15 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 3. Install dependencies:
 ```bash
-pip install -r requirements.txt
+pip install numpy
+pip install matplotlib
 ```
 
 ## Usage
 
 1. Network Simulation:
 ```bash
-python src/network.py
+python simulate_network.py
 ```
+Use a keyboard interrupt to simulate the attack after the regular traffic.
 
