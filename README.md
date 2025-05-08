@@ -16,7 +16,6 @@ zigbee-sim/
 
 ├── simulate_network.py
 ├── network.py             # Test files
-├── requirements.txt       # Python dependencies
 └── README.md              # Project documentation
 ```
 
