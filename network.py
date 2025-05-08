@@ -277,7 +277,6 @@ class ZigBeeNetwork:
             self.transmit_packet(device, packet.destination, packet)
             return ReturnMsg.SUCCESS
         
-        
         # Intermediate transmission
         else:
             # Future implementation - have to search for coordinator
@@ -295,7 +294,7 @@ class ZigBeeNetwork:
         # Gets route from Coordinator automatically - develop in future
         try:
             if (isinstance(device_to_search, Router)):
-                print(f"Searching for {device_to_search}:", coordinator.routing_table[requesting_device][device_to_search.parent])
+                print(f"Searching for {device_to_search}:", coordinator.routing_table[requesting_device][device_to_search])
                 return coordinator.routing_table[requesting_device][device_to_search]
             elif (isinstance(device_to_search, EndDevice)):
                 print(f"Searching for {device_to_search.parent}:", coordinator.routing_table[requesting_device][device_to_search.parent])
